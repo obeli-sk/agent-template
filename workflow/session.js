@@ -1,6 +1,8 @@
-// agent-template:workflow/workflow.run:
+// agent-template:workflow/workflow.run-cancellable:
 //   func(prompt: string, model: option<string>, effort: option<string>)
 //     -> result<_, string>
+// The `-cancellable` suffix is what makes Obelisk allow an operator (the UI's
+// Cancel button) to cancel a running session; do not drop it.
 //
 // The durable agent loop. One persistent execution per session. It:
 //   - discovers session config (max steps, tool registry, system prompt) once;
@@ -50,7 +52,7 @@ import {
 const SESSION_EVENTS_JOIN_SET = "session-events";
 const PROTOCOL_VERSION = 1;
 
-export default function run(prompt, model, effort) {
+export default function runCancellable(prompt, model, effort) {
     try {
         return runInner(prompt ?? "", model ?? "", effort ?? "");
     } catch (e) {

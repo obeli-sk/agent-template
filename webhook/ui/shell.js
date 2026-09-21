@@ -63,6 +63,7 @@ const SHELL_HTML = `<!doctype html>
   .tool pre { margin:.3em 0; padding:.5em; background:#f6f6f6; border-radius:5px; overflow-x:auto; font-size:.85em; }
   .tool .label { font-size:.75em; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
   .tool.err .body pre { background:var(--err-bg); }
+  .turn-latency { font-size:.72em; color:var(--muted); margin:-.5rem 0 1rem; }
   .ask { border:1px solid var(--accent); background:var(--accent-bg); border-radius:8px; padding:.7em .8em; margin:0 0 1rem; }
   .ask .q { font-weight:600; margin-bottom:.5em; }
   .ask textarea { width:100%; min-height:2.5em; padding:.4em; border:1px solid var(--line); border-radius:5px; font:inherit; }
@@ -118,7 +119,12 @@ const SHELL_HTML = `<!doctype html>
 </main>
 <script>
 "use strict";
-var state = { runs: [], currentId: null, detail: null, timer: null };
+var state = { runs: [], currentId: null, detail: null, timer: null, lastDetailHtml: null };
+// Reset at the top of each renderDetail so tool cards get a stable, unique,
+// position-based id (transcript order never changes as it grows). Keying open
+// state on the tool call id instead would collide when a provider — or the mock
+// — is not perfectly unique, and would bleed expand state across sessions.
+var toolCardSeq = 0;
 
 function el(id) { return document.getElementById(id); }
 function esc(s) {
@@ -184,6 +190,7 @@ function when(iso) {
 async function selectRun(id) {
   state.currentId = id;
   state.detail = null;
+  state.lastDetailHtml = null;
   renderRuns();
   await refreshDetail();
   scheduleDetailPoll();
@@ -208,13 +215,37 @@ function renderDetail() {
   el("cancel-btn").hidden = terminal;
 
   var t = d.transcript || {};
+  toolCardSeq = 0;
   var html = "";
   if (d.prompt) html += bubble("prompt", "user", d.prompt);
   html += renderTimeline(t);
   var pending = pendingAsk(t.human_input_events || []);
   if (pending) html += renderAskForm(pending);
-  body.innerHTML = html || '<div class="empty">Empty session. Send the first message below.</div>';
-  wireAskForm(pending);
+  html = html || '<div class="empty">Empty session. Send the first message below.</div>';
+  // Only rebuild the transcript DOM when it actually changed: polling re-renders
+  // otherwise wipe user state (a tool card the user expanded would collapse
+  // every poll). When it changes, carry forward which cards were open - but only
+  // for the SAME run (lastDetailHtml is reset to null on a run switch, so we do
+  // not bleed one session's open cards onto another's).
+  if (html !== state.lastDetailHtml) {
+    var preserve = state.lastDetailHtml !== null;
+    var openIds = {};
+    if (preserve) {
+      var existing = body.querySelectorAll("details[data-tool-id]");
+      for (var i = 0; i < existing.length; i++) {
+        if (existing[i].open) openIds[existing[i].getAttribute("data-tool-id")] = true;
+      }
+    }
+    body.innerHTML = html;
+    state.lastDetailHtml = html;
+    if (preserve) {
+      var fresh = body.querySelectorAll("details[data-tool-id]");
+      for (var j = 0; j < fresh.length; j++) {
+        if (openIds[fresh[j].getAttribute("data-tool-id")]) fresh[j].open = true;
+      }
+    }
+    wireAskForm(pending);
+  }
 
   // Composer state: working indicator + stop button.
   var working = t.agent_working === true;
@@ -229,28 +260,53 @@ function renderTimeline(t) {
   var replies = t.replies || [];
   var results = {};
   (t.sent_results || []).forEach(function (r) { results[r.id] = r; });
+  var sessionStart = t.session_started && t.session_started.created_at;
   var maxTurn = 0;
   users.concat(replies).forEach(function (x) { if (typeof x.turn_index === "number") maxTurn = Math.max(maxTurn, x.turn_index); });
   var html = "";
   for (var turn = 0; turn <= maxTurn; turn++) {
-    users.filter(function (m) { return (m.turn_index || 0) === turn; })
-      .forEach(function (m) { html += bubble("user", "user", m.text); });
-    replies.filter(function (r) { return (r.turn_index || 0) === turn; })
-      .sort(function (a, b) { return (a.step || 0) - (b.step || 0); })
-      .forEach(function (r) { html += renderReply(r, results); });
+    var turnUsers = users.filter(function (m) { return (m.turn_index || 0) === turn; });
+    turnUsers.forEach(function (m) { html += bubble("user", "user", m.text); });
+    // The turn starts when its prompt was recorded (turn 0's prompt is the
+    // workflow's start arg, so fall back to session start). The per-turn latency
+    // is real wall-clock from that point to the turn's final reply, so it
+    // captures the whole turn - LLM steps, tool calls, waits, and replays -
+    // unlike a per-step duration measured inside the workflow.
+    var startTs = turnUsers.length ? turnUsers[0].created_at : (turn === 0 ? sessionStart : null);
+    var turnReplies = replies.filter(function (r) { return (r.turn_index || 0) === turn; })
+      .sort(function (a, b) { return (a.step || 0) - (b.step || 0); });
+    turnReplies.forEach(function (r, idx) {
+      var latency = (idx === turnReplies.length - 1 && r.turn_complete) ? turnLatency(startTs, r.created_at) : "";
+      html += renderReply(r, results, latency);
+    });
   }
   return html;
 }
-function renderReply(r, results) {
+function turnLatency(startIso, endIso) {
+  var s = parseTs(startIso), e = parseTs(endIso);
+  if (!isFinite(s) || !isFinite(e) || e < s) return "";
+  var ms = e - s;
+  return ms < 1000 ? ms + "ms" : (ms / 1000).toFixed(1) + "s";
+}
+// Obelisk timestamps can carry sub-millisecond precision Date.parse rejects;
+// trim the fraction to 3 digits before parsing.
+function parseTs(iso) {
+  if (typeof iso !== "string") return NaN;
+  var t = Date.parse(iso);
+  if (isFinite(t)) return t;
+  return Date.parse(iso.replace(/(\\.\\d{3})\\d+(?=Z|[+-]\\d\\d:?\\d\\d)/, "$1"));
+}
+function renderReply(r, results, latency) {
   var rep = r.reply || {};
-  if (rep.error) return bubble("agent", "err", rep.error);
-  if (typeof rep.response === "string") return bubble("agent", "", rep.response);
+  var lat = latency ? '<div class="turn-latency">turn: ' + esc(latency) + "</div>" : "";
+  if (rep.error) return bubble("agent", "err", rep.error) + lat;
+  if (typeof rep.response === "string") return bubble("agent", "", rep.response) + lat;
   var html = "";
   if (r.narration) html += bubble("agent", "", r.narration);
   (rep.tool_calls || []).forEach(function (call) {
     html += renderTool(call, results[call.id]);
   });
-  return html;
+  return html + lat;
 }
 function renderTool(call, result) {
   var isErr = result && result.err !== undefined;
@@ -264,7 +320,7 @@ function renderTool(call, result) {
   } else {
     out = '<div class="label">running...</div>';
   }
-  return '<details class="tool' + (isErr ? " err" : "") + '"' + (isErr ? " open" : "") + '>' +
+  return '<details class="tool' + (isErr ? " err" : "") + '" data-tool-id="tc-' + (toolCardSeq++) + '"' + (isErr ? " open" : "") + '>' +
     '<summary><span class="name">' + esc(call.name) + "</span>" +
     (dur ? '<span class="dur">' + esc(dur) + "</span>" : "") + "</summary>" +
     '<div class="body"><div class="label">arguments</div><pre>' + esc(argStr) + "</pre>" + out + "</div></details>";
@@ -321,6 +377,7 @@ async function send() {
       var res = await api("POST", "/api/submit", { prompt: text, backend: backend, effort: effort });
       state.currentId = res.execution_id;
       state.detail = null;
+      state.lastDetailHtml = null;
     }
     el("input").value = "";
     await refreshRuns();
@@ -343,7 +400,7 @@ async function cancel() {
   catch (e) { alert("cancel failed: " + e.message); }
 }
 function newConversation() {
-  state.currentId = null; state.detail = null;
+  state.currentId = null; state.detail = null; state.lastDetailHtml = null;
   el("detail-head").hidden = true; el("detail-body").hidden = true; el("empty").hidden = false;
   el("working").hidden = true; el("stop").hidden = true;
   renderRuns(); el("input").focus();

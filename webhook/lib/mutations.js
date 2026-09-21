@@ -5,7 +5,7 @@
 import { jsonError, jsonResponse } from "./http.js";
 import { cancelObeliskExecution, stubObeliskExecution } from "./obelisk-api.js";
 
-const WORKFLOW_FFQN = "agent-template:workflow/workflow.run";
+const WORKFLOW_FFQN = "agent-template:workflow/workflow.run-cancellable";
 
 let runtime;
 let dynamicRuntime;

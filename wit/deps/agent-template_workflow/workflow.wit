@@ -2,9 +2,12 @@ package agent-template:workflow;
 
 // The agent loop itself (workflow/session.js). One durable execution per
 // session: holds the provider-neutral chat history, calls the model, dispatches
-// tool calls, and stays live on an input offer between turns.
+// tool calls, and stays live on an input offer between turns. The `-cancellable`
+// suffix is required: Obelisk only lets an operator cancel a workflow whose
+// exported function name ends in `-cancellable` (the UI's Cancel button relies
+// on this).
 interface workflow {
-  run: func(
+  run-cancellable: func(
     prompt: string,
     model: option<string>,
     effort: option<string>,

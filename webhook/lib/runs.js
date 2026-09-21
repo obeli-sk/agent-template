@@ -11,7 +11,7 @@ import {
 import { loadLatestAgentState, loadResponses, parseJoinName } from "./responses.js";
 import { SESSION_STATE_LABELS, emptyMarkers, projectSessionState } from "../../shared/session-state.js";
 
-const WORKFLOW_FFQN = "agent-template:workflow/workflow.run";
+const WORKFLOW_FFQN = "agent-template:workflow/workflow.run-cancellable";
 
 function pickRunState(workflowStatus) {
     const ps = workflowStatus?.pending_state || null;

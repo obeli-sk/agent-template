@@ -26,7 +26,10 @@ export default async function completion(system, messagesJson, toolsJson, model,
     const tools = parseJson(toolsJson, "tools-json", []);
     const hasFetchUrl = tools.some((t) => t && t.name === "fetch_url");
 
-    const result = latestToolResult(messages);
+    // Scope to the current turn (from the last real user prompt onward) so every
+    // fresh prompt scripts a new tool call, not just the first in the session.
+    const turn = currentTurnMessages(messages);
+    const result = firstToolResult(turn);
     if (result) {
         const status = statusFrom(result);
         const text = status !== null
@@ -40,10 +43,14 @@ export default async function completion(system, messagesJson, toolsJson, model,
         return reply([{ type: "text", text: "Hello from the mock LLM. No fetch_url tool is configured, so there is nothing to demonstrate." }], "end_turn");
     }
 
+    // A unique id per call, like a real provider (never reuse ids): the UI pairs
+    // each tool result to its call by id, so reusing one would make every card
+    // show the same result/latency.
+    const id = `mock_call_${countToolUses(messages) + 1}`;
     return reply(
         [
             { type: "text", text: `I'll fetch ${DEMO_URL} to demonstrate a tool call.` },
-            { type: "tool_use", id: "mock_call_1", name: "fetch_url", input: { url: DEMO_URL } },
+            { type: "tool_use", id, name: "fetch_url", input: { url: DEMO_URL } },
         ],
         "tool_use",
     );
@@ -53,21 +60,28 @@ function reply(blocks, stopReason) {
     return { reply: { content_json: JSON.stringify(blocks), stop_reason: stopReason } };
 }
 
-// The tool_result block belonging to the current turn: scan from the last real
-// user prompt (a user message with text) forward for a tool_result. Scoping to
-// the current turn means every fresh prompt scripts a new tool call, not just
-// the first one in the session.
-function latestToolResult(messages) {
+// Messages from the last real user prompt (a user message with text) onward.
+function currentTurnMessages(messages) {
     let start = 0;
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
         if (msg?.role === "user" && blocks(msg, "text").length > 0) { start = i; break; }
     }
-    for (let i = start; i < messages.length; i++) {
-        const found = blocks(messages[i], "tool_result").find((b) => b.tool_use_id === "mock_call_1") || blocks(messages[i], "tool_result")[0];
+    return messages.slice(start);
+}
+
+function firstToolResult(turnMessages) {
+    for (const msg of turnMessages) {
+        const found = blocks(msg, "tool_result")[0];
         if (found) return found;
     }
     return null;
+}
+
+function countToolUses(messages) {
+    let n = 0;
+    for (const msg of messages) n += blocks(msg, "tool_use").length;
+    return n;
 }
 
 function statusFrom(toolResult) {

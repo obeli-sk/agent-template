@@ -131,7 +131,7 @@ wit = "wit"
 # --- The agent loop -----------------------------------------------------------
 [[workflow_js]]
 name = "session"
-ffqn = "agent-template:workflow/workflow.run"
+ffqn = "agent-template:workflow/workflow.run-cancellable"
 location = "workflow/session.js"
 params = [
   { name = "prompt", type = "string" },
