@@ -13,7 +13,7 @@ allowed = [
   "MAX_STEPS", "TOOLS_JSON", "SYSTEM_PROMPT",
   "AGENT_MODELS", "LLM_BASE_URL",
   "FETCH_ALLOWED_HOST",
-  "OBELISK_API_URL", "OBELISK_API_URL_REGEX",
+  "OBELISK_API_URL", "OBELISK_API_URL_REGEX", "OBELISK_UI_URL",
 ]
 
 # fetch_url's reach: the security boundary for the example HTTP tool. Widen this

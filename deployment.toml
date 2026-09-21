@@ -160,6 +160,7 @@ routes = [
 ]
 env_vars = [
   { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
+  { key = "OBELISK_UI_URL", value = "${OBELISK_UI_URL:-http://127.0.0.1:8080}" },
   "AGENT_MODELS",
 ]
 # Read-only polling (statuses, responses, logs) run as direct fetches from the

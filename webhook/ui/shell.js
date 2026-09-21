@@ -3,7 +3,8 @@
 // literal, so it deliberately avoids backticks and ${...} in its own code.
 
 export function htmlShell() {
-    return new Response(SHELL_HTML, {
+    const uiUrl = (process.env["OBELISK_UI_URL"] || "http://localhost:8080").replace(/\/$/, "");
+    return new Response(SHELL_HTML.replace("__OBELISK_UI_URL__", uiUrl), {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, max-age=0" },
     });
@@ -43,6 +44,8 @@ const SHELL_HTML = `<!doctype html>
   main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
   .detail-head { padding:.8rem 2rem; border-bottom:1px solid var(--line); background:var(--panel); display:flex; align-items:center; gap:.7em; }
   .detail-head .id { font-family:ui-monospace, monospace; font-size:.82em; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .detail-head .id a { color:var(--accent); text-decoration:none; }
+  .detail-head .id a:hover { text-decoration:underline; }
   .detail-head .spacer { flex:1; }
   .detail-head button { padding:.35em .8em; font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--panel); border-radius:4px; }
   .detail-head button.danger { color:var(--err); border-color:var(--err); }
@@ -102,7 +105,7 @@ const SHELL_HTML = `<!doctype html>
   <div id="detail"><div class="empty" id="empty">Pick a conversation, or start a new one below.</div><div id="detail-body" hidden></div></div>
   <div id="composer">
     <div class="working-indicator" id="working" hidden><span class="dot"></span><span id="working-text">working</span></div>
-    <textarea id="input" placeholder="Send a message..." rows="2"></textarea>
+    <textarea id="input" placeholder="Send a message... (Shift+Enter for newline)" rows="2"></textarea>
     <div class="composer-row">
       <select id="model"></select>
       <select id="effort">
@@ -126,6 +129,10 @@ var state = { runs: [], currentId: null, detail: null, timer: null, lastDetailHt
 // — is not perfectly unique, and would bleed expand state across sessions.
 var toolCardSeq = 0;
 
+// Substituted server-side (see htmlShell); each session's id links to its
+// execution page in the Obelisk web UI.
+var OBELISK_UI_URL = "__OBELISK_UI_URL__";
+function execLink(id) { return OBELISK_UI_URL + "/execution/" + encodeURIComponent(id); }
 function el(id) { return document.getElementById(id); }
 function esc(s) {
   return String(s == null ? "" : s)
@@ -186,11 +193,28 @@ function when(iso) {
   return isNaN(d.getTime()) ? "" : d.toLocaleString();
 }
 
+// ----- url <-> selection -----
+// The open session's execution id lives in the ?execution query param so a
+// session is a real, shareable URL that survives a reload. replaceState keeps
+// it out of the history stack; popstate re-syncs on back/forward.
+function runIdFromUrl() {
+  return new URLSearchParams(location.search).get("execution") || null;
+}
+function syncUrl() {
+  var params = new URLSearchParams(location.search);
+  if (state.currentId) params.set("execution", state.currentId);
+  else params.delete("execution");
+  var qs = params.toString();
+  var target = location.pathname + (qs ? "?" + qs : "");
+  if (target !== location.pathname + location.search) history.replaceState(null, "", target);
+}
+
 // ----- detail -----
 async function selectRun(id) {
   state.currentId = id;
   state.detail = null;
   state.lastDetailHtml = null;
+  syncUrl();
   renderRuns();
   await refreshDetail();
   scheduleDetailPoll();
@@ -210,7 +234,9 @@ function renderDetail() {
   body.hidden = false;
   el("head-chip").className = "chip " + (d.cls || "");
   el("head-chip").textContent = d.label || d.status || "";
-  el("head-id").textContent = d.id + (d.backend ? "  ·  " + d.backend : "");
+  el("head-id").innerHTML =
+    '<a href="' + esc(execLink(d.id)) + '" target="_blank" rel="noopener" title="open in Obelisk web UI">' + esc(d.id) + "</a>" +
+    (d.backend ? "  ·  " + esc(d.backend) : "");
   var terminal = d.status === "finished";
   el("cancel-btn").hidden = terminal;
 
@@ -282,11 +308,20 @@ function renderTimeline(t) {
   }
   return html;
 }
+// Human-readable duration: ms under a second, then s, then m/s once it is long
+// enough that a bare millisecond (or even second) count reads terribly.
+function fmtDur(ms) {
+  if (typeof ms !== "number" || !isFinite(ms) || ms < 0) return "";
+  if (ms < 1000) return Math.round(ms) + "ms";
+  var s = ms / 1000;
+  if (s < 60) return (s < 10 ? s.toFixed(1) : String(Math.round(s))) + "s";
+  var m = Math.floor(s / 60), rem = Math.round(s % 60);
+  return rem ? m + "m " + rem + "s" : m + "m";
+}
 function turnLatency(startIso, endIso) {
   var s = parseTs(startIso), e = parseTs(endIso);
   if (!isFinite(s) || !isFinite(e) || e < s) return "";
-  var ms = e - s;
-  return ms < 1000 ? ms + "ms" : (ms / 1000).toFixed(1) + "s";
+  return fmtDur(e - s);
 }
 // Obelisk timestamps can carry sub-millisecond precision Date.parse rejects;
 // trim the fraction to 3 digits before parsing.
@@ -310,7 +345,7 @@ function renderReply(r, results, latency) {
 }
 function renderTool(call, result) {
   var isErr = result && result.err !== undefined;
-  var dur = result && typeof result.duration_milliseconds === "number" ? (result.duration_milliseconds + "ms") : "";
+  var dur = result && typeof result.duration_milliseconds === "number" ? fmtDur(result.duration_milliseconds) : "";
   var argStr = "";
   try { argStr = JSON.stringify(call.args, null, 2); } catch (e) { argStr = String(call.args); }
   var out = "";
@@ -343,20 +378,24 @@ function pendingAsk(events) {
 }
 function renderAskForm(ask) {
   return '<div class="ask"><div class="q">' + esc(ask.question) + "</div>" +
-    '<textarea id="ask-input" placeholder="Your answer..."></textarea>' +
+    '<textarea id="ask-input" placeholder="Your answer... (Shift+Enter for newline)"></textarea>' +
     '<button id="ask-send">Answer</button></div>';
 }
 function wireAskForm(ask) {
   if (!ask) return;
   var btn = el("ask-send");
   if (!btn) return;
-  btn.onclick = async function () {
+  var submit = async function () {
     var text = (el("ask-input").value || "").trim();
     if (!text) return;
     btn.disabled = true;
     try { await api("POST", "/api/answer/" + encodeURIComponent(ask.id), { answer: text }); await refreshDetail(); }
     catch (e) { btn.disabled = false; alert("answer failed: " + e.message); }
   };
+  btn.onclick = submit;
+  el("ask-input").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+  });
 }
 
 // ----- composer actions -----
@@ -378,6 +417,7 @@ async function send() {
       state.currentId = res.execution_id;
       state.detail = null;
       state.lastDetailHtml = null;
+      syncUrl();
     }
     el("input").value = "";
     await refreshRuns();
@@ -401,6 +441,7 @@ async function cancel() {
 }
 function newConversation() {
   state.currentId = null; state.detail = null; state.lastDetailHtml = null;
+  syncUrl();
   el("detail-head").hidden = true; el("detail-body").hidden = true; el("empty").hidden = false;
   el("working").hidden = true; el("stop").hidden = true;
   renderRuns(); el("input").focus();
@@ -424,12 +465,21 @@ el("stop").onclick = stop;
 el("cancel-btn").onclick = cancel;
 el("new-convo").onclick = newConversation;
 el("input").addEventListener("keydown", function (e) {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+  // Enter sends; Shift+Enter (or IME composition) inserts a newline.
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+});
+
+window.addEventListener("popstate", function () {
+  var id = runIdFromUrl();
+  if (id && id !== state.currentId) selectRun(id);
+  else if (!id && state.currentId) newConversation();
 });
 
 (async function boot() {
   await loadModels();
   await refreshRuns();
+  var id = runIdFromUrl();
+  if (id) await selectRun(id);
   scheduleDetailPoll();
 })();
 </script>

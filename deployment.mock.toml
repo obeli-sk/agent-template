@@ -138,6 +138,7 @@ routes = [
 # so the mock demo needs no environment at all beyond OBELISK_API_TOKEN.
 env_vars = [
   { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
+  { key = "OBELISK_UI_URL", value = "${OBELISK_UI_URL:-http://127.0.0.1:8080}" },
   { key = "AGENT_MODELS", value = '${AGENT_MODELS:-[{"id":"mock","label":"mock LLM","api_type":"mock"}]}' },
 ]
 [[webhook_endpoint_js.allowed_host]]

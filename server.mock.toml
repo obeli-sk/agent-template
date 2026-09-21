@@ -14,7 +14,7 @@ allowed = [
   "MAX_STEPS", "TOOLS_JSON", "SYSTEM_PROMPT",
   "AGENT_MODELS",
   "FETCH_ALLOWED_HOST",
-  "OBELISK_API_URL", "OBELISK_API_URL_REGEX",
+  "OBELISK_API_URL", "OBELISK_API_URL_REGEX", "OBELISK_UI_URL",
 ]
 
 # fetch_url's reach (the tool call in the demo is real).
