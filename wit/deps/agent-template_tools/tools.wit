@@ -1,0 +1,33 @@
+package agent-template:tools;
+
+// Control-plane activities the webhook UI calls to act on a running session:
+// cancel the whole run, or fulfil an outstanding stub offer (a user-input
+// injection or an ask_user answer). Read-only polling does not go through here;
+// the webhook fetches the Obelisk REST API directly (webhook/lib/obelisk-api.js).
+interface control {
+  variant tool-error {
+    permanent-error(string),
+    transient-error(string),
+    execution-failed,
+  }
+
+  enum action-kind {
+    cancel,
+    stub,
+  }
+
+  record action-result {
+    ok: bool,
+    execution-id: string,
+    action: action-kind,
+    // True when the execution was already in the requested terminal state.
+    already: bool,
+  }
+
+  cancel-execution: func(execution-id: string) -> result<action-result, tool-error>;
+  stub-execution: func(execution-id: string, result-json: string) -> result<action-result, tool-error>;
+}
+
+world exports {
+  export control;
+}

@@ -1,0 +1,69 @@
+[database.sqlite]
+directory = "sqlite"
+
+[secrets]
+# LLM endpoint bearer (unset for a keyless local backend).
+LLM_API_KEY = { env = "LLM_API_KEY" }
+# The agent's own Obelisk instance: used by the UI (read polling) and the
+# control activities (cancel/stub).
+OBELISK_API_TOKEN = { env = "OBELISK_API_TOKEN" }
+
+[public_env]
+allowed = [
+  "MAX_STEPS", "TOOLS_JSON", "SYSTEM_PROMPT",
+  "AGENT_MODELS", "LLM_BASE_URL",
+  "FETCH_ALLOWED_HOST",
+  "OBELISK_API_URL", "OBELISK_API_URL_REGEX",
+]
+
+# fetch_url's reach: the security boundary for the example HTTP tool. Widen this
+# (or add more allowed_host blocks) to let the agent fetch other hosts.
+[[outbound_http.allowed_host]]
+pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
+methods = ["GET"]
+
+# Agent's own instance: the control activities (cancel/stub) and the UI polling.
+# Coverage requires each server.toml entry's pattern + request_url_regex to be
+# byte-identical (after env substitution) to the component's own grant in
+# deployment.toml, so these mirror those three entries one-for-one rather than
+# being consolidated. control_cancel:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/cancel|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# control_stub:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/stub|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# ui-api webhook read polling:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET"]
+request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# LLM server.
+[[outbound_http.allowed_host]]
+pattern = "${LLM_BASE_URL:-http://127.0.0.1:9190}"
+methods = ["POST"]
+request_url_regex = "^POST http[s]?://[^/]+(/[^/]+)*/v1/(messages|chat/completions|responses)$"
+secrets = ["LLM_API_KEY"]
+replace_in = ["headers"]
+
+[log.file]
+enabled = true
+level = "info,obeli=debug,app=debug"
+style = "plain"
+span = "none"
+target = false
+rotation = "daily"
+directory = "."
+prefix = "obelisk_server_daily.log"

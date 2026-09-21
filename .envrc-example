@@ -1,0 +1,21 @@
+use flake .
+
+# The agent's own Obelisk instance token (read polling + cancel/stub).
+export OBELISK_API_TOKEN=$(obelisk generate token)
+
+# Pick an LLM catalog + endpoint (see the README "LLM endpoint" section):
+## Local keyless backend (e.g. agent-backed-llm-server on :9190)
+export AGENT_MODELS="$(cat models.local.json)"
+export LLM_BASE_URL=http://127.0.0.1:9190
+## OpenRouter
+# export AGENT_MODELS="$(cat models.openrouter.json)"
+# export LLM_BASE_URL="https://openrouter.ai"
+# export LLM_API_KEY="..."
+
+# Optional session config (defaults live in deployment.toml):
+# export MAX_STEPS=10
+# export TOOLS_JSON='[ ... ]'
+# export SYSTEM_PROMPT="You are ..."
+
+# fetch_url's reach. Widen this to let the agent GET other hosts.
+# export FETCH_ALLOWED_HOST=https://obeli.sk

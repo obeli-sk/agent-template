@@ -1,0 +1,14 @@
+[
+  {
+    "id": "claude",
+    "label": "claude (default)",
+    "api_type": "openai-chat-completions",
+    "wire_model": "claude"
+  },
+  {
+    "id": "codex",
+    "label": "codex",
+    "api_type": "openai-chat-completions",
+    "wire_model": "codex"
+  }
+]

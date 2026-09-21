@@ -1,0 +1,11 @@
+package any:any;
+
+// The set of interfaces this app's components implement. Obelisk generates the
+// typed host/guest bindings (and the `*-obelisk-ext`/`*-obelisk-stub` submit
+// variants the workflow imports) from these exports.
+world exports {
+  export agent-template:stub/stub;
+  export agent-template:llm/chat;
+  export agent-template:tools/control;
+  export agent-template:config/config;
+}

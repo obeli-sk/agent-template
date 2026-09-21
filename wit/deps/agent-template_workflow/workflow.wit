@@ -1,0 +1,16 @@
+package agent-template:workflow;
+
+// The agent loop itself (workflow/session.js). One durable execution per
+// session: holds the provider-neutral chat history, calls the model, dispatches
+// tool calls, and stays live on an input offer between turns.
+interface workflow {
+  run: func(
+    prompt: string,
+    model: option<string>,
+    effort: option<string>,
+  ) -> result<_, string>;
+}
+
+world exports {
+  export workflow;
+}

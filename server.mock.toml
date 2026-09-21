@@ -1,0 +1,58 @@
+# Server config for the MOCK deployment (deployment.mock.toml). No LLM secret or
+# outbound grant (the mock LLM makes no network call), so the demo runs with only
+# OBELISK_API_TOKEN set — no LLM key, endpoint, or catalog. Otherwise identical
+# to server.toml.
+
+[database.sqlite]
+directory = "sqlite"
+
+[secrets]
+OBELISK_API_TOKEN = { env = "OBELISK_API_TOKEN" }
+
+[public_env]
+allowed = [
+  "MAX_STEPS", "TOOLS_JSON", "SYSTEM_PROMPT",
+  "AGENT_MODELS",
+  "FETCH_ALLOWED_HOST",
+  "OBELISK_API_URL", "OBELISK_API_URL_REGEX",
+]
+
+# fetch_url's reach (the tool call in the demo is real).
+[[outbound_http.allowed_host]]
+pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
+methods = ["GET"]
+
+# Agent's own instance: control activities (cancel/stub) + UI polling. Mirrors
+# the three component grants in deployment.mock.toml one-for-one. control_cancel:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/cancel|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# control_stub:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/stub|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# ui-api webhook read polling:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET"]
+request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+[log.file]
+enabled = true
+level = "info,obeli=debug,app=debug"
+style = "plain"
+span = "none"
+target = false
+rotation = "daily"
+directory = "."
+prefix = "obelisk_server_daily.log"

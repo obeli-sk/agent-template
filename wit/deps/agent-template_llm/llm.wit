@@ -1,0 +1,35 @@
+package agent-template:llm;
+
+// The only way the agent talks to a model. The activity (activity/llm-chat.js)
+// speaks a provider-neutral message model and routes each request to the right
+// wire API (anthropic-messages, openai-chat-completions, openai-responses)
+// based on the AGENT_MODELS catalog.
+interface chat {
+  record completion-reply {
+    // JSON array of assistant blocks (text + tool_use).
+    content-json: string,
+    stop-reason: string,
+  }
+
+  record rate-limit {
+    retry-after-seconds: u32,
+    message: string,
+  }
+
+  variant completion-result {
+    reply(completion-reply),
+    rate-limited(rate-limit),
+  }
+
+  completion: func(
+    system: string,
+    messages-json: string,
+    tools-json: string,
+    model: string,
+    effort: string,
+  ) -> result<completion-result, string>;
+}
+
+world exports {
+  export chat;
+}

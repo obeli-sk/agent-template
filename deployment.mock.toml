@@ -1,0 +1,148 @@
+# agent-template, MOCK LLM variant.
+#
+# Identical to deployment.toml EXCEPT the `llm_chat` component points at
+# activity/llm-chat-mock.js (a scripted, network-free stand-in) instead of the
+# real multi-provider client, and the webhook's AGENT_MODELS defaults to a mock
+# entry. Run it with `just serve-mock` to see the whole loop drive a turn — a
+# fetch_url tool call, its real durable result, then a final answer — with NO
+# LLM endpoint, key, or catalog. Everything outside the `llm_chat` block should
+# stay in parity with deployment.toml.
+
+# --- Session config -----------------------------------------------------------
+[[activity_js]]
+name = "config_discover"
+ffqn = "agent-template:config/config.discover"
+wit = "wit"
+location = "activity/config-discover.js"
+exec.lock_expiry.seconds = 30
+env_vars = [
+  { key = "MAX_STEPS", value = "${MAX_STEPS:-10}" },
+  { key = "TOOLS_JSON", value = '''
+${TOOLS_JSON:-[
+  {
+    "name": "fetch_url",
+    "ffqn": "agent-template:tools/http.fetch-url",
+    "description": "HTTP GET a URL and return its status, headers, and body (text).",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The absolute URL to GET." },
+        "headers": { "type": "object", "description": "Optional request headers.", "additionalProperties": { "type": "string" } }
+      },
+      "required": ["url"]
+    }
+  }
+]}
+''' },
+  { key = "SYSTEM_PROMPT", value = "${SYSTEM_PROMPT:-}" },
+]
+
+# --- LLM endpoint: MOCK -------------------------------------------------------
+# The scripted stand-in. Pure (no network, no secret, no catalog): it reads the
+# conversation state and replies in the same provider-neutral shape as the real
+# client. See activity/llm-chat-mock.js. This is the ONLY block that differs
+# from deployment.toml.
+[[activity_js]]
+name = "llm_chat"
+ffqn = "agent-template:llm/chat.completion"
+wit = "wit"
+location = "activity/llm-chat-mock.js"
+exec.lock_expiry.seconds = 30
+
+# --- Example tool: fetch_url --------------------------------------------------
+[[activity_js]]
+name = "tool_fetch_url"
+ffqn = "agent-template:tools/http.fetch-url"
+params = [{ name = "args-json", type = "string" }]
+return_type = "result<string, string>"
+location = "activity/fetch-url.js"
+exec.lock_expiry.seconds = 30
+[[activity_js.allowed_host]]
+pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
+methods = ["GET"]
+
+# --- Control plane ------------------------------------------------------------
+[[activity_js]]
+name = "control_cancel"
+ffqn = "agent-template:tools/control.cancel-execution"
+wit = "wit"
+location = "activity/control-cancel.js"
+env_vars = [{ key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" }]
+[[activity_js.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/cancel|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+[[activity_js]]
+name = "control_stub"
+ffqn = "agent-template:tools/control.stub-execution"
+wit = "wit"
+location = "activity/control-stub.js"
+env_vars = [{ key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" }]
+[[activity_js.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "PUT"]
+request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/stub|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# --- Stub interface -----------------------------------------------------------
+[[activity_stub]]
+name = "stub_injection"
+ffqn = "agent-template:stub/stub.injection"
+wit = "wit"
+
+[[activity_stub]]
+name = "stub_record_output"
+ffqn = "agent-template:stub/stub.record-output"
+wit = "wit"
+
+[[activity_stub]]
+name = "stub_ask_user"
+ffqn = "agent-template:stub/stub.ask-user"
+wit = "wit"
+
+# --- The agent loop -----------------------------------------------------------
+[[workflow_js]]
+name = "session"
+ffqn = "agent-template:workflow/workflow.run"
+location = "workflow/session.js"
+params = [
+  { name = "prompt", type = "string" },
+  { name = "model",  type = "option<string>" },
+  { name = "effort", type = "option<string>" },
+]
+return_type = "result<_, string>"
+exec.lock_expiry.minutes = 2
+
+# --- Web UI -------------------------------------------------------------------
+[[webhook_endpoint_js]]
+name = "ui-api"
+location = "webhook/ui-api.js"
+routes = [
+  { methods = ["GET"], route = "/" },
+  { methods = ["GET"], route = "/api/models" },
+  { methods = ["GET"], route = "/api/runs" },
+  { methods = ["GET"], route = "/api/runs/:execution-id" },
+  { methods = ["GET"], route = "/api/logs/:execution-id" },
+  { methods = ["POST"], route = "/api/submit" },
+  { methods = ["POST"], route = "/api/sessions" },
+  { methods = ["POST"], route = "/api/answer/:child-id" },
+  { methods = ["POST"], route = "/api/interrupt/:execution-id" },
+  { methods = ["POST"], route = "/api/cancel/:execution-id" },
+  { methods = ["POST"], route = "/api/input/:execution-id" },
+]
+# AGENT_MODELS defaults to a mock entry here (in deployment.toml it is required)
+# so the mock demo needs no environment at all beyond OBELISK_API_TOKEN.
+env_vars = [
+  { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
+  { key = "AGENT_MODELS", value = '${AGENT_MODELS:-[{"id":"mock","label":"mock LLM","api_type":"mock"}]}' },
+]
+[[webhook_endpoint_js.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET"]
+request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]

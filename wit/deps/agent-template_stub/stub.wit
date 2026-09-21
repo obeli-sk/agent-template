@@ -1,0 +1,134 @@
+package agent-template:stub;
+
+// SOURCE OF TRUTH for the durable notification protocol. The workflow
+// (workflow/session.js) self-stubs each `session-event` onto a "session-events"
+// join set so it becomes a durably readable response; the web UI walks that
+// stream to render the transcript (webhook/lib/responses.js). Inputs flow the
+// other way: the UI fulfils the workflow's always-open `injection` offer with a
+// `session-input`. Changing an event/input shape here is the one edit that
+// ripples to both sides.
+interface stub {
+  // ----- inputs: what the UI (or a peer) sends into a running session -----
+
+  record prompt-input {
+    // A UI-generated id so the emitted user-message event can be correlated.
+    id: string,
+    text: string,
+  }
+
+  // Stop the current turn: delivered through the same live input offer as
+  // prompt, so it races the in-flight LLM completion instead of needing its
+  // own channel. The outstanding completion is still drained, its reply just
+  // discarded, then the turn ends.
+  record interrupt-input {
+    id: string,
+  }
+
+  variant session-input {
+    prompt(prompt-input),
+    interrupt(interrupt-input),
+  }
+
+  // ----- events: what the session publishes about its own progress -----
+
+  record session-started-event {
+    protocol-version: u32,
+    prompt: string,
+    backend: string,
+    effort: string,
+    system-prompt: string,
+  }
+
+  // A fresh user-input offer is open; its execution-id is the stub the UI
+  // fulfils to inject a prompt or an interrupt.
+  record input-offered-event {
+    execution-id: string,
+    turn-index: u64,
+  }
+
+  record agent-status-event {
+    working: bool,
+    turn-index: u64,
+  }
+
+  record user-message-event {
+    id: string,
+    text: string,
+    turn-index: u64,
+  }
+
+  record assistant-reply-event {
+    // JSON array of provider-neutral assistant blocks (text + tool_use).
+    content-json: string,
+    turn-index: u64,
+    // The per-turn model-invocation index (1-based); with turn-index and the
+    // in-reply tool-call id it uniquely identifies a step and its results.
+    step: u64,
+    duration-milliseconds: u64,
+    turn-complete: bool,
+  }
+
+  record agent-error-event {
+    id: string,
+    text: string,
+    turn-index: u64,
+  }
+
+  // A model tool call blocked on the human: `ask_user` published this question
+  // and is waiting for an answer (see the `ask-user` func below).
+  record human-input-requested-event {
+    execution-id: string,
+    question: string,
+    turn-index: u64,
+  }
+
+  record human-input-resolved-event {
+    execution-id: string,
+    turn-index: u64,
+  }
+
+  variant tool-output {
+    // JSON text the tool activity returned (or ask_user's answer).
+    ok(string),
+    error(string),
+  }
+
+  record tool-result-event {
+    // The originating tool_use id.
+    id: string,
+    // The tool name, so the UI can label a generic result without decoding it.
+    name: string,
+    output: tool-output,
+    turn-index: u64,
+    step: u64,
+    duration-milliseconds: u64,
+  }
+
+  variant session-event {
+    session-started(session-started-event),
+    input-offered(input-offered-event),
+    agent-status(agent-status-event),
+    user-message(user-message-event),
+    assistant-reply(assistant-reply-event),
+    agent-error(agent-error-event),
+    human-input-requested(human-input-requested-event),
+    human-input-resolved(human-input-resolved-event),
+    tool-result(tool-result-event),
+  }
+
+  // ----- stub functions the session self-submits and awaits -----
+
+  // The always-open user-input offer; the UI stubs it to inject a prompt or an
+  // interrupt.
+  injection: func() -> result<session-input, string>;
+  // Returns a list so a burst of events published back-to-back can be recorded
+  // as one durable batch instead of one round trip per event.
+  record-output: func() -> result<list<session-event>, string>;
+  // The `ask_user` tool: publish a question, block until the UI answers, and
+  // return that answer to the model in the same turn.
+  ask-user: func(question: string) -> result<string, string>;
+}
+
+world exports {
+  export stub;
+}
