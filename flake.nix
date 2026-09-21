@@ -19,6 +19,8 @@
             just
             jq
             nodejs # unit tests (node --test)
+            gh # scripts/sync-branch-protection.sh
+            yq-go # scripts/sync-branch-protection.sh
           ];
         in
         {
