@@ -60,7 +60,7 @@ replace_in = ["headers"]
 
 [log.file]
 enabled = true
-level = "info,obeli=debug,app=debug"
+level = "info,app=debug"
 style = "plain"
 span = "none"
 target = false
