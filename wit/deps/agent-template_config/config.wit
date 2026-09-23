@@ -2,12 +2,12 @@ package agent-template:config;
 
 // Session settings the workflow discovers once at start
 // (activity/config-discover.js backs this, reading the MAX_STEPS / TOOLS_JSON /
-// SYSTEM_PROMPT env vars), so operator config changes take effect without
-// rebuilding the workflow. Adding a tool is a deployment edit (a new activity
-// block plus a TOOLS_JSON entry), never a workflow rebuild.
+// SYSTEM_PROMPT env vars), so which tools the model is offered, with what
+// description and schema, is operator config rather than workflow code.
 interface config {
   // One model-facing tool: its display name, the activity FFQN the workflow
-  // dispatches the call to, a one-line description, and the JSON Schema
+  // dispatches the call to (it must be one the workflow imports, see
+  // workflow/tools.js), a one-line description, and the JSON Schema
   // (serialized) for its input.
   record tool {
     name: string,

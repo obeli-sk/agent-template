@@ -9,7 +9,8 @@
 //
 // This is the template's example of the generic tool contract every HTTP tool
 // follows: one activity, one JSON object in, one JSON object out. Copy it,
-// change the fetch, and register the new activity in TOOLS_JSON.
+// change the fetch, import the new activity in workflow/tools.js, and register
+// it in TOOLS_JSON.
 
 const MAX_REDIRECTS = 10;
 const DEFAULT_MAX_BYTES = 64 * 1024;

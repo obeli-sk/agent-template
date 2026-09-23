@@ -3,15 +3,15 @@
 # One workflow (the agent loop), a multi-provider LLM client, one example HTTP
 # tool (fetch_url), the config/discovery activity, two control-plane activities
 # the UI calls (cancel/stub), the stub interface the loop self-stubs onto, and
-# the web UI webhook. Adding a tool is an edit HERE (a new [[activity_js]] block
-# plus a TOOLS_JSON entry below) — never a workflow rebuild.
+# the web UI webhook. Adding a tool takes a new [[activity_js]] block here, a
+# TOOLS_JSON entry below, and an import in workflow/tools.js.
 
 # --- Session config -----------------------------------------------------------
 # Read once at session start (activity/config-discover.js). MAX_STEPS caps model
 # invocations per turn. TOOLS_JSON is the model-facing tool registry: each entry
-# names an activity FFQN and a JSON Schema for its input. SYSTEM_PROMPT overrides
-# the built-in base prompt. Override any of them from the environment without
-# rebuilding the workflow.
+# names an activity FFQN (which workflow/tools.js must import) and a JSON Schema
+# for its input. SYSTEM_PROMPT overrides the built-in base prompt. Override any
+# of them from the environment to retune the linked tools, prompt and budget.
 [[activity_js]]
 name = "config_discover"
 ffqn = "agent-template:config/config.discover"
@@ -68,7 +68,7 @@ replace_in = ["headers"]
 # run(args-json) -> result<string, string>. The allowed_host grant is the
 # security boundary: widen FETCH_ALLOWED_HOST (or add more [[allowed_host]]
 # blocks) to let the agent reach other hosts. Copy this block, point it at a new
-# activity, and register it in TOOLS_JSON to add another tool.
+# activity, import it in workflow/tools.js, and register it in TOOLS_JSON.
 [[activity_js]]
 name = "tool_fetch_url"
 ffqn = "agent-template:tools/http.fetch-url"

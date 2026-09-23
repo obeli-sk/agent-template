@@ -13,8 +13,8 @@
 //     racing it against each LLM completion so a prompt typed mid-turn is queued
 //     and an interrupt stops the turn;
 //   - dispatches each model tool call: the built-in `ask_user` is answered by the
-//     `ask-user` stub (human-in-the-loop), every other tool is an activity called
-//     by FFQN with the tool_use input as JSON.
+//     `ask-user` stub (human-in-the-loop), every other tool is one of the
+//     activities imported in tools.js, called with the tool_use input as JSON.
 //
 // Pure, host-free helpers live in session-logic.js (unit-tested); this file is
 // the host-facing orchestration. WIT record/variant fields cross into JS as
@@ -22,7 +22,6 @@
 
 import { discover } from "agent-template:config/config";
 import * as obelisk from "obelisk:workflow@1.0.0";
-import * as dynamic from "obelisk:workflow-dynamic@1.0.0";
 import { completionSubmit } from "agent-template:llm-obelisk-ext/chat";
 import {
     askUserSubmit,
@@ -38,6 +37,7 @@ import {
     emptyReplyError,
     hasUserVisibleText,
     interruptedError,
+    linkTools,
     llmErrorEvent,
     renderSystemPrompt,
     stepLimitError,
@@ -48,6 +48,7 @@ import {
     toolResultMessageValue,
     userText,
 } from "./session-logic.js";
+import { TOOL_IMPLS } from "./tools.js";
 
 const SESSION_EVENTS_JOIN_SET = "session-events";
 const PROTOCOL_VERSION = 1;
@@ -284,8 +285,9 @@ function callLlmWithUser(session, system, messages, toolsJson, model, effort, no
 
 // ----- tool dispatch -----
 
-// ask_user is answered inline via the stub; every other tool is an activity
-// called by FFQN with the tool_use input serialized as its single argument.
+// ask_user is answered inline via the stub; every other tool is the activity
+// linked to its FFQN, called with the tool_use input serialized as its single
+// argument.
 function dispatchTool(call, toolsByName, notifications) {
     if (call.name === "ask_user") {
         const question = typeof call.input?.question === "string" ? call.input.question : "";
@@ -299,7 +301,7 @@ function dispatchTool(call, toolsByName, notifications) {
     const tool = toolsByName.get(call.name);
     if (!tool) return toolError(call.id, `unknown tool: ${call.name}`);
     try {
-        const value = dynamic.call(tool.ffqn, [JSON.stringify(call.input ?? {})]);
+        const value = tool.call(JSON.stringify(call.input ?? {}));
         return toolOk(call.id, typeof value === "string" ? value : JSON.stringify(value));
     } catch (e) {
         return toolError(call.id, errorMessage(e));
@@ -311,7 +313,7 @@ function dispatchTool(call, toolsByName, notifications) {
 function agentLoop(prompt, model, effort, config) {
     const maxSteps = config.max_steps;
     const tools = config.tools ?? [];
-    const toolsByName = new Map(tools.map((t) => [t.name, t]));
+    const toolsByName = linkTools(tools, TOOL_IMPLS);
     const toolsJson = buildToolsJson(tools);
     const system = renderSystemPrompt(config.system_prompt, tools);
 

@@ -4,6 +4,7 @@ import {
     ASK_USER_TOOL,
     buildToolsJson,
     hasUserVisibleText,
+    linkTools,
     renderSystemPrompt,
     toolError,
     toolOk,
@@ -24,6 +25,23 @@ test("buildToolsJson always leads with ask_user and expands schema_json", () => 
 test("buildToolsJson tolerates a missing or invalid schema", () => {
     const specs = JSON.parse(buildToolsJson([{ name: "x", ffqn: "a:b/c.d", description: "", schema_json: "not json" }]));
     assert.deepEqual(specs[1].input_schema, { type: "object", properties: {} });
+});
+
+test("linkTools resolves each ffqn to its imported activity", () => {
+    const fetchUrl = () => "{}";
+    const linked = linkTools(
+        [{ name: "fetch_url", ffqn: "a:b/c.d", description: "get a url", schema_json: "{}" }],
+        new Map([["a:b/c.d", fetchUrl]]),
+    );
+    assert.equal(linked.get("fetch_url").call, fetchUrl);
+    assert.equal(linked.get("fetch_url").description, "get a url");
+});
+
+test("linkTools rejects a tool the workflow does not import", () => {
+    assert.throws(
+        () => linkTools([{ name: "ghost", ffqn: "a:b/c.missing" }], new Map([["a:b/c.d", () => ""]])),
+        (e) => typeof e === "string" && /ghost \(a:b\/c\.missing\)/.test(e) && /Linked: a:b\/c\.d/.test(e),
+    );
 });
 
 test("renderSystemPrompt lists ask_user and each configured tool", () => {

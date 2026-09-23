@@ -7,9 +7,9 @@
 //        }, string>
 //
 // Read once at session start, so operator config (the tool registry, the step
-// budget, the base prompt) changes take effect on the next session without
-// rebuilding the workflow. Adding a tool is a deployment edit: write its
-// activity, then append a TOOLS_JSON entry pointing at its FFQN.
+// budget, the base prompt) changes take effect on the next session. The FFQN in
+// a TOOLS_JSON entry must be one the workflow imports (workflow/tools.js); the
+// workflow fails the session on an entry it is not linked against.
 
 const DEFAULT_MAX_STEPS = 10;
 

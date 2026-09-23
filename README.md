@@ -30,7 +30,7 @@ workflow  (workflow/session.js)  ── the agent loop, one durable execution/se
       │        │                    self-stubs session-events ──> UI polls them
       │        └── ask_user ──> stub (ask-user)  ── human-in-the-loop
       ├── llm.completion   (activity/llm-chat.js)     ── the model
-      └── tool dispatch    (activity/fetch-url.js, ...) ── your HTTP tools
+      └── tool dispatch    (workflow/tools.js: activity/fetch-url.js, ...) ── your HTTP tools
 config.discover (activity/config-discover.js)          ── tools + prompt + budget
 ```
 
@@ -92,26 +92,37 @@ works: point `LLM_BASE_URL` at it and add catalog entries.
 
 ## Adding a tool
 
-No workflow rebuild. Two edits:
+Three edits:
 
 1. **Write the activity.** Use the `fetch_url` contract: a default export
    `run(args-json: string) -> result<string, string>` that parses the model's
    tool input from `args-json` and returns its result as JSON text. Copy
    [`activity/fetch-url.js`](activity/fetch-url.js) as a starting point.
-2. **Register it.** Add an `[[activity_js]]` block in
+2. **Deploy it.** Add an `[[activity_js]]` block in
    [`deployment.toml`](deployment.toml) (its own FFQN, `params`/`return_type`,
-   and any `allowed_host` grants), then append an entry to the `TOOLS_JSON`
-   default (or set the `TOOLS_JSON` env var):
+   and any `allowed_host` grants).
+3. **Link and register it.** Import the activity in
+   [`workflow/tools.js`](workflow/tools.js) and add its FFQN to the `TOOL_IMPLS`
+   map, then append an entry to the `TOOLS_JSON` default in `deployment.toml`
+   (or set the `TOOLS_JSON` env var):
 
    ```json
    { "name": "my_tool", "ffqn": "agent-template:tools/http.my-tool",
      "description": "what it does", "schema": { "type": "object", "properties": { ... } } }
    ```
 
-The workflow reads `TOOLS_JSON` at session start, offers each tool to the model
-alongside `ask_user`, and dispatches a `tool_use` by calling the matching FFQN
-with the input serialized as its single argument. The `schema` is the JSON Schema
-the model sees for the tool's input.
+The workflow reads `TOOLS_JSON` at session start, resolves each entry's FFQN to
+the activity imported in `workflow/tools.js`, offers the tool to the model
+alongside `ask_user`, and dispatches a `tool_use` by calling that activity with
+the input serialized as its single argument. The `schema` is the JSON Schema the
+model sees for the tool's input.
+
+Tools are statically imported rather than dispatched with
+`dynamic.call(ffqn, ...)`, so Obelisk verifies every tool target when the
+deployment starts. `TOOLS_JSON` still decides which of the linked tools the model
+is offered, and with what description and schema, without a workflow edit; an
+entry naming an FFQN the workflow does not import fails the session at start
+with that FFQN and the linked set.
 
 Network reach is exactly what the tool's `allowed_host` grants (and its mirror in
 `server.toml`). `fetch_url` defaults to `https://obeli.sk` only; widen

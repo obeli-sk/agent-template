@@ -39,6 +39,28 @@ export function buildToolsJson(tools) {
     return JSON.stringify(specs);
 }
 
+// Resolve each configured tool's FFQN to the activity the workflow imports
+// (workflow/tools.js), keyed by the name the model calls. An entry naming an
+// FFQN this workflow was not built against is an operator error: fail the
+// session with the linked set rather than offering the model a dead tool.
+export function linkTools(tools, impls) {
+    const linked = new Map();
+    const unlinked = [];
+    for (const tool of tools ?? []) {
+        const call = impls.get(tool.ffqn);
+        if (call) {
+            linked.set(tool.name, { ...tool, call });
+        } else {
+            unlinked.push(`${tool.name} (${tool.ffqn})`);
+        }
+    }
+    if (unlinked.length > 0) {
+        throw `TOOLS_JSON names tools this workflow is not linked against: ${unlinked.join(", ")}. `
+            + `Import them in workflow/tools.js. Linked: ${[...impls.keys()].join(", ") || "(none)"}`;
+    }
+    return linked;
+}
+
 function parseSchema(schemaJson) {
     if (typeof schemaJson !== "string" || !schemaJson.trim()) return { type: "object", properties: {} };
     try {
