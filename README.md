@@ -63,7 +63,7 @@ deployment:
 
 ```sh
 export OBELISK_API_TOKEN=$(obelisk generate token)
-just serve-mock            # deployment.mock.toml + server.mock.toml
+just serve-mock            # deployment.mock.toml + app.mock.toml
 ```
 
 It swaps only the LLM client for a scripted stand-in
@@ -125,7 +125,7 @@ entry naming an FFQN the workflow does not import fails the session at start
 with that FFQN and the linked set.
 
 Network reach is exactly what the tool's `allowed_host` grants (and its mirror in
-`server.toml`). `fetch_url` defaults to `https://obeli.sk` only; widen
+`app.toml`). `fetch_url` defaults to `https://obeli.sk` only; widen
 `FETCH_ALLOWED_HOST` or add grants for the hosts your agent should reach.
 
 ## Configuration
@@ -148,8 +148,10 @@ Everything is an env var with a default in `deployment.toml`:
 `just test` runs the offline unit suites (`node --test`): the pure loop helpers
 (`workflow/session-logic.test.js`), the UI state projection
 (`shared/session-state.test.js`), and the `fetch_url` tool
-(`activity/fetch-url.test.js`). `just verify` compiles and links the whole
-deployment against the WIT without a running server.
+(`activity/fetch-url.test.js`). `just verify` compiles and links both
+deployments against the WIT and checks them against their app policies
+(`app.toml`, `app.mock.toml`) without a running server; it needs
+`OBELISK_API_TOKEN` and `AGENT_MODELS` set, as CI does with placeholders.
 
 ## License
 

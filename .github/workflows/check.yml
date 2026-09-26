@@ -61,7 +61,9 @@ jobs:
       - name: Populate the nix store
         run: nix develop --command echo
 
-      # Compiles and links every component and the workflow (both deployments)
-      # against the WIT. No secrets or endpoints needed.
-      - name: obelisk deployment verify
+      # Placeholders for the required public variable and secret, so verify runs without --allow-unavailable-runtime-config.
+      - name: obelisk server verify
+        env:
+          AGENT_MODELS: "[]"
+          OBELISK_API_TOKEN: ci-placeholder
         run: nix develop --command just verify
