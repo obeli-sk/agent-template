@@ -1,29 +1,27 @@
-# Server config for the MOCK deployment (deployment.mock.toml). No LLM secret or
-# outbound grant (the mock LLM makes no network call), so the demo runs with only
-# OBELISK_API_TOKEN set — no LLM key, endpoint, or catalog. Otherwise identical
-# to server.toml.
+# App policy for deployment.mock.toml: app.toml without the LLM secret, catalog and grant.
 
-[database.sqlite]
-directory = "sqlite"
+app_name = "agent-template"
 
 [secrets]
-OBELISK_API_TOKEN = { env = "OBELISK_API_TOKEN" }
+OBELISK_API_TOKEN = {}
 
+# Variables with a `${X:-default}` fallback in deployment.mock.toml are optional.
 [public_env]
-allowed = [
-  "MAX_STEPS", "TOOLS_JSON", "SYSTEM_PROMPT",
-  "AGENT_MODELS",
-  "FETCH_ALLOWED_HOST",
-  "OBELISK_API_URL", "OBELISK_API_URL_REGEX", "OBELISK_UI_URL",
-]
+AGENT_MODELS = { optional = true }
+FETCH_ALLOWED_HOST = { optional = true }
+MAX_STEPS = { optional = true }
+OBELISK_API_URL = { optional = true }
+OBELISK_API_URL_REGEX = { optional = true }
+OBELISK_UI_URL = { optional = true }
+SYSTEM_PROMPT = { optional = true }
+TOOLS_JSON = { optional = true }
 
 # fetch_url's reach (the tool call in the demo is real).
 [[outbound_http.allowed_host]]
 pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
 methods = ["GET"]
 
-# Agent's own instance: control activities (cancel/stub) + UI polling. Mirrors
-# the three component grants in deployment.mock.toml one-for-one. control_cancel:
+# Agent's own instance: mirrors the three component grants in deployment.mock.toml one-for-one. control_cancel:
 [[outbound_http.allowed_host]]
 pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
 methods = ["GET", "PUT"]
@@ -46,13 +44,3 @@ methods = ["GET"]
 request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
 secrets = ["OBELISK_API_TOKEN"]
 replace_in = ["headers"]
-
-[log.file]
-enabled = true
-level = "info,obeli=debug,app=debug"
-style = "plain"
-span = "none"
-target = false
-rotation = "daily"
-directory = "."
-prefix = "obelisk_server_daily.log"
