@@ -22,3 +22,4 @@ test:
   node --test shared/session-state.test.js
   node --test activity/fetch-url.test.js
   node --test activity/llm-chat-mock.test.js
+  node --test webhook/ui/shell.test.js

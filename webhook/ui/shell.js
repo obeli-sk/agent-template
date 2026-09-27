@@ -285,7 +285,7 @@ function renderTimeline(t) {
   var users = t.user_messages || [];
   var replies = t.replies || [];
   var results = {};
-  (t.sent_results || []).forEach(function (r) { results[r.id] = r; });
+  (t.sent_results || []).forEach(function (r) { results[toolResultKey(r.turn_index, r.step, r.id)] = r; });
   var sessionStart = t.session_started && t.session_started.created_at;
   var maxTurn = 0;
   users.concat(replies).forEach(function (x) { if (typeof x.turn_index === "number") maxTurn = Math.max(maxTurn, x.turn_index); });
@@ -307,6 +307,9 @@ function renderTimeline(t) {
     });
   }
   return html;
+}
+function toolResultKey(turn, step, id) {
+  return JSON.stringify([turn, step, id]);
 }
 // Human-readable duration: ms under a second, then s, then m/s once it is long
 // enough that a bare millisecond (or even second) count reads terribly.
@@ -339,7 +342,7 @@ function renderReply(r, results, latency) {
   var html = "";
   if (r.narration) html += bubble("agent", "", r.narration);
   (rep.tool_calls || []).forEach(function (call) {
-    html += renderTool(call, results[call.id]);
+    html += renderTool(call, results[toolResultKey(r.turn_index, r.step, call.id)]);
   });
   return html + lat;
 }
