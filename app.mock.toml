@@ -24,6 +24,14 @@ methods = ["GET"]
 # Agent's own instance: mirrors the three component grants in deployment.mock.toml one-for-one. control_cancel:
 [[outbound_http.allowed_host]]
 pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["GET", "POST"]
+request_url_regex = "^(GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/events|POST ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/events/batch)$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+# control_cancel:
+[[outbound_http.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
 methods = ["GET", "PUT"]
 request_url_regex = "^(PUT ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/cancel|GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/E_[^/]+/status)$"
 secrets = ["OBELISK_API_TOKEN"]

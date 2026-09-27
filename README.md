@@ -5,9 +5,9 @@
 > [Obelisk](https://obeli.sk). Copy it, add your own tools, and change the prompt.
 
 A durable Obelisk workflow that *is* an agent loop, written entirely in
-JavaScript (no build step). It holds a provider-neutral chat history, calls an
-LLM, dispatches the tools the model asks for, and stays live between turns on a
-user-input offer. Two tools ship as examples:
+JavaScript (no build step). It records a provider-neutral chat history in LLM
+execution events, calls an LLM, dispatches the tools the model asks for, and stays
+live between turns on a user-input offer. Two tools ship as examples:
 
 - **`fetch_url`** — a GET-only HTTP tool (an activity). The template's example of
   the generic tool contract: one activity, a JSON object in, a JSON object out.

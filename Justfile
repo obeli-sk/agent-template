@@ -23,3 +23,4 @@ test:
   node --test activity/fetch-url.test.js
   node --test activity/llm-chat-mock.test.js
   node --test webhook/ui/shell.test.js
+  node --test activity/llm-history.test.js
