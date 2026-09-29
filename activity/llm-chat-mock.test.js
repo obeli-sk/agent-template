@@ -12,13 +12,13 @@ test("step 1: a fresh prompt yields a fetch_url tool call", async () => {
     assert.equal(res.reply.stop_reason, "tool_use");
     const call = blocks(res).find((b) => b.type === "tool_use");
     assert.equal(call.name, "fetch_url");
-    assert.equal(call.input.url, "https://obeli.sk/");
+    assert.equal(call.input.url, "http://127.0.0.1:9090/demo");
 });
 
 test("step 2: a tool result yields a final answer citing the status", async () => {
     const messages = JSON.stringify([
         { role: "user", content: [{ type: "text", text: "fetch it" }] },
-        { role: "assistant", content: [{ type: "tool_use", id: "mock_call_1", name: "fetch_url", input: { url: "https://obeli.sk/" } }] },
+        { role: "assistant", content: [{ type: "tool_use", id: "mock_call_1", name: "fetch_url", input: { url: "http://127.0.0.1:9090/demo" } }] },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "mock_call_1", content: JSON.stringify({ status: 200 }), is_error: false }] },
     ]);
     const res = await completion("", messages, TOOLS, "mock", "", []);

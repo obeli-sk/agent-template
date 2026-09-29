@@ -9,6 +9,7 @@ OBELISK_API_TOKEN = {}
 [public_env]
 AGENT_MODELS = { optional = true }
 FETCH_ALLOWED_HOST = { optional = true }
+MOCK_FETCH_URL = { optional = true }
 MAX_STEPS = { optional = true }
 OBELISK_API_URL = { optional = true }
 OBELISK_API_URL_REGEX = { optional = true }
@@ -16,9 +17,9 @@ OBELISK_UI_URL = { optional = true }
 SYSTEM_PROMPT = { optional = true }
 TOOLS_JSON = { optional = true }
 
-# fetch_url's reach (the tool call in the demo is real).
+# fetch_url's reach (the tool call in the demo is real, against the dummy /demo webhook).
 [[outbound_http.allowed_host]]
-pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
+pattern = "${FETCH_ALLOWED_HOST:-http://127.0.0.1:9090}"
 methods = ["GET"]
 
 # Agent's own instance: mirrors the three component grants in deployment.mock.toml one-for-one. control_cancel:
