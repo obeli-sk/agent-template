@@ -2,10 +2,11 @@
 #
 # Identical to deployment.toml EXCEPT the `llm_chat` component points at
 # activity/llm-chat-mock.js (a scripted, network-free stand-in) instead of the
-# real multi-provider client, and the webhook's AGENT_MODELS defaults to a mock
-# entry. Run it with `just serve-mock` to see the whole loop drive a turn — a
-# fetch_url tool call, its real durable result, then a final answer — with NO
-# LLM endpoint, key, or catalog. Everything outside the `llm_chat` block should
+# real multi-provider client, the webhook's AGENT_MODELS defaults to a mock
+# entry, and a dummy `demo_page` webhook serves `/demo` as the fetch_url target
+# (so no outbound network is needed). Run it with `just serve-mock` to see the
+# whole loop drive a turn: a fetch_url tool call, its real durable result, then a
+# final answer, with NO LLM endpoint, key, or catalog. Everything else should
 # stay in parity with deployment.toml.
 
 # --- Session config -----------------------------------------------------------
@@ -40,15 +41,18 @@ ${TOOLS_JSON:-[
 # --- LLM endpoint: MOCK -------------------------------------------------------
 # The scripted stand-in. Pure (no network, no secret, no catalog): it reads the
 # conversation state and replies in the same provider-neutral shape as the real
-# client. See activity/llm-chat-mock.js. This is the ONLY block that differs
-# from deployment.toml.
+# client. See activity/llm-chat-mock.js. Apart from `demo_page`, this is the
+# only block that differs from deployment.toml.
 [[activity_js]]
 name = "llm_chat"
 ffqn = "agent-template:llm/chat.completion"
 wit = "wit"
 location = "activity/llm-chat-mock.js"
 exec.lock_expiry.seconds = 30
-env_vars = [{ key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" }]
+env_vars = [
+  { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
+  { key = "MOCK_FETCH_URL", value = "${MOCK_FETCH_URL:-http://127.0.0.1:9090/demo}" },
+]
 [[activity_js.allowed_host]]
 pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
 methods = ["POST"]
@@ -65,7 +69,7 @@ return_type = "result<string, string>"
 location = "activity/fetch-url.js"
 exec.lock_expiry.seconds = 30
 [[activity_js.allowed_host]]
-pattern = "${FETCH_ALLOWED_HOST:-https://obeli.sk}"
+pattern = "${FETCH_ALLOWED_HOST:-http://127.0.0.1:9090}"
 methods = ["GET"]
 
 # --- Control plane ------------------------------------------------------------
@@ -154,3 +158,10 @@ methods = ["GET"]
 request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
 secrets = ["OBELISK_API_TOKEN"]
 replace_in = ["headers"]
+
+# --- Dummy fetch target (mock only) -------------------------------------------
+# What the mock LLM's fetch_url call GETs, so the demo needs no outbound network.
+[[webhook_endpoint_js]]
+name = "demo_page"
+location = "webhook/demo-page.js"
+routes = [{ methods = ["GET"], route = "/demo" }]

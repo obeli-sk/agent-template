@@ -12,11 +12,12 @@
 //     -> a final text answer citing the fetched HTTP status (stop_reason "end_turn")
 //
 // The tool call is real: the workflow dispatches it to the fetch_url activity,
-// which actually GETs the URL; only the "model" is scripted. Swap
+// which actually GETs the URL (by default the dummy /demo webhook in
+// deployment.mock.toml); only the "model" is scripted. Swap
 // deployment.mock.toml back to deployment.toml (the real llm-chat.js) for a live
 // model.
 
-const DEMO_URL = "https://obeli.sk/";
+const DEMO_URL = process.env["MOCK_FETCH_URL"] || "http://127.0.0.1:9090/demo";
 import { loadMessages, obeliskApi } from "./llm-history.js";
 
 export default async function completion(system, deltaJson, toolsJson, model, effort, historyIds) {

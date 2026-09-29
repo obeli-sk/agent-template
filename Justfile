@@ -26,6 +26,6 @@ test:
   node --test activity/llm-history.test.js
 
 # End-to-end: run deployment.mock.toml on a throwaway server and drive one turn
-# (a real fetch_url tool call to https://obeli.sk + the final answer).
+# (a real fetch_url tool call to the dummy /demo webhook + the final answer).
 e2e:
   ./scripts/e2e-mock.sh

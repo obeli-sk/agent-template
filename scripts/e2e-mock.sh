@@ -4,7 +4,7 @@
 # tool call ran for real and its result reached the final answer.
 #
 # Usage: ./scripts/e2e-mock.sh
-# Requires: obelisk, curl, jq (via `nix develop`) and outbound access to https://obeli.sk.
+# Requires: obelisk, curl, jq (via `nix develop`). fetch_url targets the dummy /demo webhook.
 # Ports default to non-standard ones so a local dev server can keep running;
 # override with E2E_API_PORT, E2E_WEBUI_PORT, E2E_WEBHOOK_PORT.
 
@@ -30,6 +30,8 @@ EOF
 export OBELISK_API_TOKEN="${OBELISK_API_TOKEN:-$(obelisk generate token)}"
 export OBELISK_API_URL="http://127.0.0.1:${API_PORT}"
 export OBELISK_API_URL_REGEX="http://127\\.0\\.0\\.1:${API_PORT}"
+export FETCH_ALLOWED_HOST="$WEBHOOK"
+export MOCK_FETCH_URL="$WEBHOOK/demo"
 
 obelisk server run -d deployment.mock.toml --server-config "$TMP/server.toml" \
     --app-config app.mock.toml > "$TMP/server.log" 2>&1 &

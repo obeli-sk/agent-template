@@ -68,10 +68,11 @@ just serve-mock            # deployment.mock.toml + app.mock.toml
 
 It swaps only the LLM client for a scripted stand-in
 ([`activity/llm-chat-mock.js`](activity/llm-chat-mock.js)) that replies with a
-`fetch_url` tool call, then, once the real durable tool result comes back, a
-final answer citing the fetched HTTP status. No LLM endpoint, key, or catalog is
-needed — just `OBELISK_API_TOKEN`. Submit any prompt at
-<http://localhost:9090> and watch the tool call and final answer appear. This is
+`fetch_url` tool call to a dummy `/demo` webhook on the same server
+([`webhook/demo-page.js`](webhook/demo-page.js)), then, once the real durable
+tool result comes back, a final answer citing the fetched HTTP status. No LLM
+endpoint, key, or catalog is needed — just `OBELISK_API_TOKEN`. Submit any
+prompt at <http://localhost:9090> and watch the tool call and final answer appear. This is
 the fastest way to see the architecture end to end, and it documents the
 `llm/chat.completion` contract by example.
 
@@ -156,7 +157,7 @@ deployments against the WIT and checks them against their app policies
 `deployment.mock.toml` on a throwaway server (non-default ports and a temporary
 database, so a dev server can keep running) and drives one turn through the
 webhook API, asserting the `fetch_url` tool call succeeded and its result reached
-the final answer. It needs network access to `https://obeli.sk`.
+the final answer. No outbound network is needed.
 
 ## License
 
