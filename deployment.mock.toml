@@ -48,6 +48,13 @@ ffqn = "agent-template:llm/chat.completion"
 wit = "wit"
 location = "activity/llm-chat-mock.js"
 exec.lock_expiry.seconds = 30
+env_vars = [{ key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" }]
+[[activity_js.allowed_host]]
+pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
+methods = ["POST"]
+request_url_regex = "^POST ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions/events/batch$"
+secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
 
 # --- Example tool: fetch_url --------------------------------------------------
 [[activity_js]]

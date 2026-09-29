@@ -3,7 +3,7 @@
 // A deterministic stand-in for activity/llm-chat.js: same interface, but instead
 // of calling a provider it scripts one turn so the whole loop can be
 // demonstrated with no LLM endpoint or key (see deployment.mock.toml). It reads
-// the conversation state the workflow passes in and replies in the same
+// the conversation from prior LLM executions and replies in the same
 // provider-neutral shape the real client returns:
 //
 //   turn step 1 (a fresh user prompt, no tool result yet):
@@ -17,12 +17,13 @@
 // model.
 
 const DEMO_URL = "https://obeli.sk/";
+import { loadMessages, obeliskApi } from "./llm-history.js";
 
-export default async function completion(system, messagesJson, toolsJson, model, effort) {
+export default async function completion(system, deltaJson, toolsJson, model, effort, historyIds) {
     void system;
     void model;
     void effort;
-    const messages = parseJson(messagesJson, "messages-json", []);
+    const messages = await loadMessages(historyIds, deltaJson, historyIds.length ? obeliskApi() : null);
     const tools = parseJson(toolsJson, "tools-json", []);
     const hasFetchUrl = tools.some((t) => t && t.name === "fetch_url");
 

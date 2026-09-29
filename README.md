@@ -5,9 +5,9 @@
 > [Obelisk](https://obeli.sk). Copy it, add your own tools, and change the prompt.
 
 A durable Obelisk workflow that *is* an agent loop, written entirely in
-JavaScript (no build step). It holds a provider-neutral chat history, calls an
-LLM, dispatches the tools the model asks for, and stays live between turns on a
-user-input offer. Two tools ship as examples:
+JavaScript (no build step). It records a provider-neutral chat history in LLM
+execution events, calls an LLM, dispatches the tools the model asks for, and stays
+live between turns on a user-input offer. Two tools ship as examples:
 
 - **`fetch_url`** — a GET-only HTTP tool (an activity). The template's example of
   the generic tool contract: one activity, a JSON object in, a JSON object out.
@@ -152,6 +152,11 @@ Everything is an env var with a default in `deployment.toml`:
 deployments against the WIT and checks them against their app policies
 (`app.toml`, `app.mock.toml`) without a running server; it needs
 `OBELISK_API_TOKEN` and `AGENT_MODELS` set, as CI does with placeholders.
+`just e2e` ([`scripts/e2e-mock.sh`](scripts/e2e-mock.sh)) starts
+`deployment.mock.toml` on a throwaway server (non-default ports and a temporary
+database, so a dev server can keep running) and drives one turn through the
+webhook API, asserting the `fetch_url` tool call succeeded and its result reached
+the final answer. It needs network access to `https://obeli.sk`.
 
 ## License
 

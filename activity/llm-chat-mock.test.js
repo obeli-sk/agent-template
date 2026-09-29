@@ -8,7 +8,7 @@ function blocks(res) { return JSON.parse(res.reply.content_json); }
 
 test("step 1: a fresh prompt yields a fetch_url tool call", async () => {
     const messages = JSON.stringify([{ role: "user", content: [{ type: "text", text: "fetch it" }] }]);
-    const res = await completion("", messages, TOOLS, "mock", "");
+    const res = await completion("", messages, TOOLS, "mock", "", []);
     assert.equal(res.reply.stop_reason, "tool_use");
     const call = blocks(res).find((b) => b.type === "tool_use");
     assert.equal(call.name, "fetch_url");
@@ -21,7 +21,7 @@ test("step 2: a tool result yields a final answer citing the status", async () =
         { role: "assistant", content: [{ type: "tool_use", id: "mock_call_1", name: "fetch_url", input: { url: "https://obeli.sk/" } }] },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "mock_call_1", content: JSON.stringify({ status: 200 }), is_error: false }] },
     ]);
-    const res = await completion("", messages, TOOLS, "mock", "");
+    const res = await completion("", messages, TOOLS, "mock", "", []);
     assert.equal(res.reply.stop_reason, "end_turn");
     const text = blocks(res).map((b) => b.text).join("");
     assert.match(text, /HTTP 200/);
@@ -35,6 +35,6 @@ test("each new turn scripts a fresh tool call, not just the first", async () => 
         { role: "assistant", content: [{ type: "text", text: "done" }] },
         { role: "user", content: [{ type: "text", text: "again" }] },
     ]);
-    const res = await completion("", messages, TOOLS, "mock", "");
+    const res = await completion("", messages, TOOLS, "mock", "", []);
     assert.equal(res.reply.stop_reason, "tool_use");
 });

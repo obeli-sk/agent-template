@@ -6,7 +6,7 @@
 //
 // The durable agent loop. One persistent execution per session. It:
 //   - discovers session config (max steps, tool registry, system prompt) once;
-//   - holds a provider-neutral chat history in memory (replayed on recovery);
+//   - holds only messages pending the next LLM call and accepted LLM IDs;
 //   - self-stubs each `session-event` onto a "session-events" join set so the UI
 //     can read the transcript durably (Notifications below);
 //   - keeps an always-open user-input offer on a per-turn "user-{turn}" join set,
@@ -202,11 +202,11 @@ function takeUserEvent(session, notifications) {
 
 // Apply one injected input. Returns true when it should trigger an LLM turn (a
 // prompt); an interrupt received while idle is a stale click and does nothing.
-function applySessionInput(event, turnIndex, notifications, messages) {
+function applySessionInput(event, turnIndex, notifications, pendingMessages) {
     if (event.prompt) {
         const { id, text } = event.prompt;
         notifications.notify({ user_message: { id, text, turn_index: turnIndex } });
-        messages.push(userText(text));
+        pendingMessages.push(userText(text));
         return true;
     }
     return false;
@@ -214,14 +214,14 @@ function applySessionInput(event, turnIndex, notifications, messages) {
 
 // One LLM call raced against the user input offer; each injected event lands
 // after the request snapshot, so it reaches the model on the following turn.
-function callLlmWithUser(session, system, messages, toolsJson, model, effort, notifications) {
+function callLlmWithUser(session, system, pendingMessages, toolsJson, model, effort, historyIds, notifications) {
     let promptQueued = false;
     while (true) {
         notifications.flush();
-        const requestMessageCount = messages.length;
-        const messagesJson = JSON.stringify(messages);
+        const requestMessageCount = pendingMessages.length;
+        const deltaJson = JSON.stringify(pendingMessages);
         const startedAt = hostNowMs();
-        const completionId = completionSubmit(session.joinSet, system, messagesJson, toolsJson, model, effort);
+        const completionId = completionSubmit(session.joinSet, system, deltaJson, toolsJson, model, effort, historyIds);
 
         let completion;
         while (true) {
@@ -252,7 +252,7 @@ function callLlmWithUser(session, system, messages, toolsJson, model, effort, no
                     break;
                 }
                 rearmUserInput(session, notifications);
-                promptQueued = promptQueued || applySessionInput(event, session.turnIndex, notifications, messages);
+                promptQueued = promptQueued || applySessionInput(event, session.turnIndex, notifications, pendingMessages);
             } else {
                 throw `unexpected session response: ${completedId}`;
             }
@@ -278,6 +278,7 @@ function callLlmWithUser(session, system, messages, toolsJson, model, effort, no
             contentJson: reply.content_json,
             durationMilliseconds: elapsedMilliseconds(startedAt, hostNowMs()),
             requestMessageCount,
+            completionId,
             promptQueued,
         };
     }
@@ -318,7 +319,7 @@ function agentLoop(prompt, model, effort, config) {
     const system = renderSystemPrompt(config.system_prompt, tools);
 
     const notifications = new Notifications();
-    const messages = prompt.trim() ? [userText(prompt.trim())] : [];
+    const pendingMessages = prompt.trim() ? [userText(prompt.trim())] : [];
 
     notifications.notify({
         session_started: { protocol_version: PROTOCOL_VERSION, prompt, backend: model, effort, system_prompt: system },
@@ -327,8 +328,9 @@ function agentLoop(prompt, model, effort, config) {
     let turnIndex = 0;
     let emptyReplyNudgedTurn = -1;
     let stepWarnedTurn = -1;
-    let shouldCallLlm = messages.length > 0;
+    let shouldCallLlm = pendingMessages.length > 0;
     let agentSteps = 0;
+    const historyIds = [];
     const session = openSession(turnIndex, notifications);
     publishAgentStatus(notifications, shouldCallLlm, turnIndex);
 
@@ -341,7 +343,7 @@ function agentLoop(prompt, model, effort, config) {
                 const error = stepLimitError(turnIndex, maxSteps);
                 // A user, not assistant, message: a synthetic assistant turn can
                 // poison provider prefix pairing, so the next turn can re-pair.
-                messages.push(userText(error.text));
+                pendingMessages.push(userText(error.text));
                 notifications.notify({ agent_error: error });
                 shouldCallLlm = false;
                 publishAgentStatus(notifications, false, turnIndex);
@@ -351,18 +353,18 @@ function agentLoop(prompt, model, effort, config) {
             }
             if (shouldCallLlm && agentSteps >= stepWarningThreshold(maxSteps) && stepWarnedTurn !== turnIndex) {
                 stepWarnedTurn = turnIndex;
-                messages.push(userText(stepWarningText(maxSteps)));
+                pendingMessages.push(userText(stepWarningText(maxSteps)));
             }
 
             let turnComplete = false;
             if (!shouldCallLlm) {
                 const event = takeUserEvent(session, notifications);
-                shouldCallLlm = applySessionInput(event, turnIndex, notifications, messages);
+                shouldCallLlm = applySessionInput(event, turnIndex, notifications, pendingMessages);
                 if (shouldCallLlm) publishAgentStatus(notifications, true, turnIndex);
                 turnComplete = !shouldCallLlm;
             } else {
                 publishAgentStatus(notifications, true, turnIndex);
-                const outcome = callLlmWithUser(session, system, messages, toolsJson, model, effort, notifications);
+                const outcome = callLlmWithUser(session, system, pendingMessages, toolsJson, model, effort, historyIds, notifications);
                 if (outcome.kind === "failed") {
                     notifications.notify({ agent_error: llmErrorEvent(turnIndex, outcome.message) });
                     shouldCallLlm = false;
@@ -373,7 +375,7 @@ function agentLoop(prompt, model, effort, config) {
                 }
                 if (outcome.kind === "interrupted") {
                     const error = interruptedError(turnIndex);
-                    messages.push(userText(error.text));
+                    pendingMessages.push(userText(error.text));
                     notifications.notify({ agent_error: error });
                     shouldCallLlm = false;
                     agentSteps = 0;
@@ -397,7 +399,8 @@ function agentLoop(prompt, model, effort, config) {
                         turn_complete: assistantCompletesTurn,
                     },
                 });
-                messages.splice(outcome.requestMessageCount, 0, { role: "assistant", content: outcome.content });
+                pendingMessages.splice(0, outcome.requestMessageCount);
+                historyIds.push(outcome.completionId);
 
                 if (calls.length > 0) {
                     const resultBlocks = [];
@@ -417,11 +420,11 @@ function agentLoop(prompt, model, effort, config) {
                         });
                         resultBlocks.push(toolResultMessageValue(block));
                     }
-                    messages.splice(outcome.requestMessageCount + 1, 0, { role: "user", content: resultBlocks });
+                    pendingMessages.unshift({ role: "user", content: resultBlocks });
                     shouldCallLlm = true;
                 } else if (nudgeEmptyReply) {
                     emptyReplyNudgedTurn = turnIndex;
-                    messages.splice(outcome.requestMessageCount + 1, 0, userText(EMPTY_REPLY_NUDGE));
+                    pendingMessages.unshift(userText(EMPTY_REPLY_NUDGE));
                     shouldCallLlm = true;
                 } else {
                     if (!outcome.promptQueued && !hasUserVisibleText(outcome.content)) {
