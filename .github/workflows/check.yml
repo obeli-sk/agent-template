@@ -67,3 +67,24 @@ jobs:
           AGENT_MODELS: "[]"
           OBELISK_API_TOKEN: ci-placeholder
         run: nix develop --command just verify
+
+  e2e:
+    name: End-to-end (mock LLM)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          ref: ${{ github.event.inputs.ref }} # Use the ref if provided, otherwise defaults to the current branch/commit
+
+      - uses: nixbuild/nix-quick-install-action@v34
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          nix_conf: |
+            extra-substituters = https://obeli-sk.cachix.org
+            extra-trusted-public-keys = obeli-sk.cachix.org-1:31iM9GWSEhAXvvuTWQ7CvAcwvgRzsuJ9yJghywSd3Jw=
+
+      - name: Populate the nix store
+        run: nix develop --command echo
+
+      - name: Mock LLM turn with a real tool call
+        run: nix develop --command just e2e

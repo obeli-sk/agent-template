@@ -152,6 +152,11 @@ Everything is an env var with a default in `deployment.toml`:
 deployments against the WIT and checks them against their app policies
 (`app.toml`, `app.mock.toml`) without a running server; it needs
 `OBELISK_API_TOKEN` and `AGENT_MODELS` set, as CI does with placeholders.
+`just e2e` ([`scripts/e2e-mock.sh`](scripts/e2e-mock.sh)) starts
+`deployment.mock.toml` on a throwaway server (non-default ports and a temporary
+database, so a dev server can keep running) and drives one turn through the
+webhook API, asserting the `fetch_url` tool call succeeded and its result reached
+the final answer. It needs network access to `https://obeli.sk`.
 
 ## License
 
