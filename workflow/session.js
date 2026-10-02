@@ -12,6 +12,8 @@
 //   - keeps an always-open user-input offer on a per-turn "user-{turn}" join set,
 //     racing it against each LLM completion so a prompt typed mid-turn is queued
 //     and an interrupt stops the turn;
+//   - ends itself with an error after IDLE_TIMEOUT without user input or an
+//     ask_user answer, so abandoned sessions become terminal and retainable;
 //   - dispatches each model tool call: the built-in `ask_user` is answered by the
 //     `ask-user` stub (human-in-the-loop), every other tool is one of the
 //     activities imported in tools.js, called with the tool_use input as JSON.
@@ -52,6 +54,11 @@ import { TOOL_IMPLS } from "./tools.js";
 
 const SESSION_EVENTS_JOIN_SET = "session-events";
 const PROTOCOL_VERSION = 1;
+const IDLE_TIMEOUT = { days: 7 };
+
+class SessionIdle extends Error {
+    constructor() { super("session idle timeout: no interaction for 7 days"); }
+}
 
 export default function runCancellable(prompt, model, effort) {
     try {
@@ -139,6 +146,7 @@ class Notifications {
 function askUser(question, notifications) {
     const joinSet = obelisk.createJoinSet();
     const executionId = askUserSubmit(joinSet, question);
+    const idleDelayId = joinSet.submitDelay(IDLE_TIMEOUT);
     notifications.humanInputRequested(executionId, question);
     notifications.flush();
     let answer;
@@ -147,6 +155,10 @@ function askUser(question, notifications) {
     } catch (e) {
         joinSet.close();
         throw `ask-user await failed: ${errorMessage(e)}`;
+    }
+    if (joinSet.lastId === idleDelayId) {
+        joinSet.close();
+        throw new SessionIdle();
     }
     if (joinSet.lastId !== executionId) {
         joinSet.close();
@@ -163,13 +175,14 @@ function openSession(turnIndex, notifications) {
     const joinSet = obelisk.createJoinSet({ name: `user-${turnIndex}` });
     const injectionId = injectionSubmit(joinSet);
     notifications.notify({ input_offered: { execution_id: injectionId, turn_index: turnIndex } });
-    return { joinSet, injectionId, turnIndex };
+    return { joinSet, injectionId, turnIndex, idleDelayId: null };
 }
 
 function advanceTurn(session, notifications) {
     if (session.joinSet) session.joinSet.close();
     const turnIndex = session.turnIndex + 1;
     session.joinSet = obelisk.createJoinSet({ name: `user-${turnIndex}` });
+    session.idleDelayId = null;
     session.injectionId = injectionSubmit(session.joinSet);
     session.turnIndex = turnIndex;
     notifications.notify({ input_offered: { execution_id: session.injectionId, turn_index: turnIndex } });
@@ -185,7 +198,10 @@ function publishAgentStatus(notifications, working, turnIndex) {
     notifications.notify({ agent_status: { working, turn_index: turnIndex } });
 }
 
+// The idle delay is left pending once input arrives: it is ignored if it fires
+// mid-turn and cancelled when advanceTurn closes the turn's join set.
 function takeUserEvent(session, notifications) {
+    session.idleDelayId = session.joinSet.submitDelay(IDLE_TIMEOUT);
     notifications.flush();
     let event;
     try {
@@ -193,6 +209,7 @@ function takeUserEvent(session, notifications) {
     } catch (e) {
         throw `session injection failed: ${errorMessage(e)}`;
     }
+    if (session.joinSet.lastId === session.idleDelayId) throw new SessionIdle();
     if (session.joinSet.lastId !== session.injectionId) {
         throw `unexpected session response while idle: ${session.joinSet.lastId}`;
     }
@@ -253,6 +270,8 @@ function callLlmWithUser(session, system, pendingMessages, toolsJson, model, eff
                 }
                 rearmUserInput(session, notifications);
                 promptQueued = promptQueued || applySessionInput(event, session.turnIndex, notifications, pendingMessages);
+            } else if (completedId === session.idleDelayId) {
+                session.idleDelayId = null;
             } else {
                 throw `unexpected session response: ${completedId}`;
             }
@@ -296,6 +315,7 @@ function dispatchTool(call, toolsByName, notifications) {
         try {
             return toolOk(call.id, askUser(question, notifications));
         } catch (e) {
+            if (e instanceof SessionIdle) throw e;
             return toolError(call.id, typeof e === "string" ? e : String(e?.message ?? e));
         }
     }

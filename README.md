@@ -54,7 +54,8 @@ just serve                                        # obelisk server run -d deploy
 `nix develop` (or direnv via `.envrc-example`) provides the pinned Obelisk and
 Node. Then open <http://localhost:9090> (the webhook listener), start a
 conversation, and watch the model call `fetch_url`; trigger `ask_user` and answer
-it inline; use Stop to interrupt a turn or Cancel to end the run.
+it inline; use Stop to interrupt a turn or Cancel to end the run. A session that gets
+no prompt or `ask_user` answer for 7 days ends itself with an idle-timeout error.
 
 ### Try it with no LLM (`just serve-mock`)
 
