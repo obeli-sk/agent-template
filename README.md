@@ -42,12 +42,11 @@ the source of truth for both sides.
 
 ## Run
 
-JS components need no build. Provide an LLM catalog + endpoint, then serve:
+JS components need no build. Configure the LLM endpoint, then serve:
 
 ```sh
 export OBELISK_API_TOKEN=$(obelisk generate token)
-export AGENT_MODELS="$(cat models.local.json)"   # optional fallback catalog
-export LLM_BASE_URL=http://127.0.0.1:9190         # match the catalog's endpoint
+export LLM_BASE_URL=http://127.0.0.1:9190         # discover models from the local backend
 just serve                                        # obelisk server run -d deployment.toml
 ```
 
@@ -94,14 +93,17 @@ from discovery. If discovery is unavailable, empty, or malformed, both consumers
 fall back to `AGENT_MODELS`. No catalog is required when discovery succeeds.
 The mock deployment keeps its configured mock model and makes no discovery call.
 
-Two fallback catalogs ship:
+The local endpoint is the sibling
+[`agent-backed-llm-server`](https://github.com/obeli-sk/agent-backed-llm-server)
+on `:9190`. Its discovery endpoint supplies the model catalog; no local
+fallback file is needed.
 
-- `models.local.json` (keyless): a local OpenAI-compatible backend on `:9190`,
-  e.g. [`agent-backed-llm-server`](https://github.com/obeli-sk/agent-backed-llm-server).
-- `models.openrouter.json` (`LLM_API_KEY`): [OpenRouter](https://openrouter.ai).
+An optional fallback catalog ships for [OpenRouter](https://openrouter.ai):
+set `AGENT_MODELS="$(cat models.openrouter.json)"` and configure `LLM_API_KEY`.
 
 Any OpenAI/Anthropic-compatible endpoint (vLLM, Ollama, the provider directly)
-works: point `LLM_BASE_URL` at it and add catalog entries.
+works: point `LLM_BASE_URL` at it and configure `AGENT_MODELS` when its discovery
+endpoint is unavailable or its models need a different adapter.
 
 ## Adding a tool
 
