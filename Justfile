@@ -1,6 +1,6 @@
 default: serve
 
-# Run the agent. Requires AGENT_MODELS + LLM_BASE_URL in the environment
+# Run the agent. LLM_BASE_URL provides discovery; AGENT_MODELS is the fallback
 # (see .envrc-example / the README). JS components need no build step.
 serve:
   obelisk server run -d deployment.toml --server-config server.toml --app-config app.toml
@@ -11,7 +11,7 @@ serve:
 serve-mock:
   obelisk server run -d deployment.mock.toml --server-config server.toml --app-config app.mock.toml
 
-# Compile, link and policy-check both deployments; needs OBELISK_API_TOKEN and AGENT_MODELS.
+# Compile, link and policy-check both deployments; needs OBELISK_API_TOKEN.
 verify:
   obelisk server verify --server-config server.toml --app-config app.toml -d deployment.toml
   obelisk server verify --server-config server.toml --app-config app.mock.toml -d deployment.mock.toml
@@ -20,6 +20,7 @@ verify:
 test:
   node --test workflow/session-logic.test.js
   node --test shared/session-state.test.js
+  node --test shared/model-catalog.test.js
   node --test activity/fetch-url.test.js
   node --test activity/llm-chat-mock.test.js
   node --test webhook/ui/shell.test.js

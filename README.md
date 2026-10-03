@@ -42,12 +42,11 @@ the source of truth for both sides.
 
 ## Run
 
-JS components need no build. Provide an LLM catalog + endpoint, then serve:
+JS components need no build. Configure the LLM endpoint, then serve:
 
 ```sh
 export OBELISK_API_TOKEN=$(obelisk generate token)
-export AGENT_MODELS="$(cat models.local.json)"   # pick a catalog
-export LLM_BASE_URL=http://127.0.0.1:9190         # match the catalog's endpoint
+export LLM_BASE_URL=http://127.0.0.1:9190         # discover models from the local backend
 just serve                                        # obelisk server run -d deployment.toml
 ```
 
@@ -79,18 +78,32 @@ the fastest way to see the architecture end to end, and it documents the
 
 ## LLM endpoint
 
-One endpoint serves the whole catalog: the JSON catalog `AGENT_MODELS`
-(required), the origin `LLM_BASE_URL`, and an optional bearer `LLM_API_KEY`. Each
+One endpoint serves the whole catalog: the fallback JSON catalog `AGENT_MODELS`
+(optional), the origin `LLM_BASE_URL`, and an optional bearer `LLM_API_KEY`. Each
 catalog entry is `{ id, label, api_type, path?, wire_model, max_tokens? }`, where
 `api_type` is `anthropic-messages`, `openai-chat-completions`, or
-`openai-responses`. Two catalogs ship:
+`openai-responses`.
 
-- `models.local.json` (keyless): a local OpenAI-compatible backend on `:9190`,
-  e.g. [`agent-backed-llm-server`](https://github.com/obeli-sk/agent-backed-llm-server).
-- `models.openrouter.json` (`LLM_API_KEY`): [OpenRouter](https://openrouter.ai).
+The model picker and LLM activity first try `GET <LLM_BASE_URL>/v1/models`,
+using `LLM_API_KEY` when configured. A nonempty response supplies the models;
+matching configured entries keep their aliases, adapters, provider paths, and
+token limits. New models use OpenAI chat completions, and advertised defaults
+appear first. Existing sessions can still resolve configured aliases omitted
+from discovery. If discovery is unavailable, empty, or malformed, both consumers
+fall back to `AGENT_MODELS`. No catalog is required when discovery succeeds.
+The mock deployment keeps its configured mock model and makes no discovery call.
+
+The local endpoint is the sibling
+[`agent-backed-llm-server`](https://github.com/obeli-sk/agent-backed-llm-server)
+on `:9190`. Its discovery endpoint supplies the model catalog; no local
+fallback file is needed.
+
+An optional fallback catalog ships for [OpenRouter](https://openrouter.ai):
+set `AGENT_MODELS="$(cat models.openrouter.json)"` and configure `LLM_API_KEY`.
 
 Any OpenAI/Anthropic-compatible endpoint (vLLM, Ollama, the provider directly)
-works: point `LLM_BASE_URL` at it and add catalog entries.
+works: point `LLM_BASE_URL` at it and configure `AGENT_MODELS` when its discovery
+endpoint is unavailable or its models need a different adapter.
 
 ## Adding a tool
 
@@ -136,7 +149,7 @@ Everything is an env var with a default in `deployment.toml`:
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `AGENT_MODELS` | (required) | LLM catalog JSON |
+| `AGENT_MODELS` | `[]` | Fallback LLM catalog JSON |
 | `LLM_BASE_URL` | `http://127.0.0.1:9190` | LLM endpoint origin |
 | `LLM_API_KEY` | (unset) | LLM bearer, keyless if unset |
 | `MAX_STEPS` | `10` | model invocations per turn |
@@ -153,7 +166,7 @@ Everything is an env var with a default in `deployment.toml`:
 (`activity/fetch-url.test.js`). `just verify` compiles and links both
 deployments against the WIT and checks them against their app policies
 (`app.toml`, `app.mock.toml`) without a running server; it needs
-`OBELISK_API_TOKEN` and `AGENT_MODELS` set, as CI does with placeholders.
+`OBELISK_API_TOKEN` set. `AGENT_MODELS` is optional.
 `just e2e` ([`scripts/e2e-mock.sh`](scripts/e2e-mock.sh)) starts
 `deployment.mock.toml` on a throwaway server (non-default ports and a temporary
 database, so a dev server can keep running) and drives one turn through the
