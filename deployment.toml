@@ -41,8 +41,8 @@ ${TOOLS_JSON:-[
 ]
 
 # --- LLM endpoint: multi-provider client --------------------------------------
-# The only way the agent talks to a model. AGENT_MODELS (a JSON catalog) is
-# REQUIRED; each entry routes to a wire API (anthropic-messages,
+# The only way the agent talks to a model. GET /v1/models supplies the catalog;
+# AGENT_MODELS is an optional fallback; each entry routes to a wire API (anthropic-messages,
 # openai-chat-completions, openai-responses) under the shared LLM_BASE_URL
 # origin, authenticated by the single LLM_API_KEY secret (unset for keyless).
 [[activity_js]]
@@ -53,7 +53,7 @@ location = "activity/llm-chat.js"
 exec.lock_expiry.minutes = 10
 max_retries = 3
 env_vars = [
-  "AGENT_MODELS",
+  { key = "AGENT_MODELS", value = "${AGENT_MODELS:-[]}" },
   { key = "LLM_BASE_URL", value = "${LLM_BASE_URL:-http://127.0.0.1:9190}" },
   { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
 ]
@@ -65,8 +65,8 @@ secrets = ["OBELISK_API_TOKEN"]
 replace_in = ["headers"]
 [[activity_js.allowed_host]]
 pattern = "${LLM_BASE_URL:-http://127.0.0.1:9190}"
-methods = ["POST"]
-request_url_regex = "^POST http[s]?://[^/]+(/[^/]+)*/v1/(messages|chat/completions|responses)$"
+methods = ["GET", "POST"]
+request_url_regex = "^GET http[s]?://[^/]+(/[^/]+)*/v1/models$|^POST http[s]?://[^/]+(/[^/]+)*/v1/(messages|chat/completions|responses)$"
 secrets = [{ name = "LLM_API_KEY", optional = true }]
 replace_in = ["headers"]
 
@@ -168,7 +168,8 @@ routes = [
 env_vars = [
   { key = "OBELISK_API_URL", value = "${OBELISK_API_URL:-http://127.0.0.1:5005}" },
   { key = "OBELISK_UI_URL", value = "${OBELISK_UI_URL:-http://127.0.0.1:8080}" },
-  "AGENT_MODELS",
+  { key = "AGENT_MODELS", value = "${AGENT_MODELS:-[]}" },
+  { key = "LLM_BASE_URL", value = "${LLM_BASE_URL:-http://127.0.0.1:9190}" },
 ]
 # Read-only polling (statuses, responses, logs) run as direct fetches from the
 # webhook instead of one child activity per call.
@@ -177,4 +178,11 @@ pattern = "${OBELISK_API_URL:-http://127.0.0.1:5005}"
 methods = ["GET"]
 request_url_regex = "^GET ${OBELISK_API_URL_REGEX:-http://127\\.0\\.0\\.1:5005}/v1/executions"
 secrets = ["OBELISK_API_TOKEN"]
+replace_in = ["headers"]
+
+[[webhook_endpoint_js.allowed_host]]
+pattern = "${LLM_BASE_URL:-http://127.0.0.1:9190}"
+methods = ["GET"]
+request_url_regex = "^GET http[s]?://[^/]+(/[^/]+)*/v1/models$"
+secrets = [{ name = "LLM_API_KEY", optional = true }]
 replace_in = ["headers"]

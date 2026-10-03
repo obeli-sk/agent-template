@@ -9,7 +9,7 @@ OBELISK_API_TOKEN = {}
 
 # Variables with a `${X:-default}` fallback in deployment.toml are optional.
 [public_env]
-AGENT_MODELS = {}
+AGENT_MODELS = { optional = true }
 FETCH_ALLOWED_HOST = { optional = true }
 LLM_BASE_URL = { optional = true }
 MAX_STEPS = { optional = true }
@@ -60,7 +60,7 @@ replace_in = ["headers"]
 # LLM server.
 [[outbound_http.allowed_host]]
 pattern = "${LLM_BASE_URL:-http://127.0.0.1:9190}"
-methods = ["POST"]
-request_url_regex = "^POST http[s]?://[^/]+(/[^/]+)*/v1/(messages|chat/completions|responses)$"
+methods = ["GET", "POST"]
+request_url_regex = "^GET http[s]?://[^/]+(/[^/]+)*/v1/models$|^POST http[s]?://[^/]+(/[^/]+)*/v1/(messages|chat/completions|responses)$"
 secrets = ["LLM_API_KEY"]
 replace_in = ["headers"]
